@@ -9,6 +9,7 @@ import (
 
 	"github.com/MalaSalsa/tls-client/profiles"
 	http "github.com/bogdanfinn/fhttp"
+	tls "github.com/bogdanfinn/utls"
 )
 
 type HttpClientOption func(config *httpClientConfig)
@@ -60,6 +61,8 @@ type httpClientConfig struct {
 	dialer      net.Dialer
 
 	enabledBandwidthTracker bool
+
+	certificates []tls.Certificate
 }
 
 // WithProxyUrl configures a HTTP client to use the specified proxy URL.
@@ -70,6 +73,14 @@ type httpClientConfig struct {
 func WithProxyUrl(proxyUrl string) HttpClientOption {
 	return func(config *httpClientConfig) {
 		config.proxyUrl = proxyUrl
+	}
+}
+
+// WithCertificate configures a Certificate to our HTTP Client.
+// Some cloudfare servers use a certificate to differentiate between a real client and a bot
+func WithCertificate(certificate tls.Certificate) HttpClientOption {
+	return func(config *httpClientConfig) {
+		config.certificates = append(config.certificates, certificate)
 	}
 }
 

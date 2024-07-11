@@ -50,6 +50,7 @@ type roundTripper struct {
 	transportOptions            *TransportOptions
 	withRandomTlsExtensionOrder bool
 	disableIPV6                 bool
+	certificates                []tls.Certificate
 }
 
 func (rt *roundTripper) CloseIdleConnections() {
@@ -143,7 +144,14 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 		host = rt.serverNameOverwrite
 	}
 
-	tlsConfig := &tls.Config{ClientSessionCache: rt.clientSessionCache, ServerName: host, InsecureSkipVerify: rt.insecureSkipVerify, OmitEmptyPsk: true}
+	tlsConfig := &tls.Config{
+		ClientSessionCache: rt.clientSessionCache,
+		ServerName:         host,
+		InsecureSkipVerify: rt.insecureSkipVerify,
+		OmitEmptyPsk:       true,
+		Certificates:       rt.certificates,
+	}
+
 	if rt.transportOptions != nil {
 		tlsConfig.RootCAs = rt.transportOptions.RootCAs
 		tlsConfig.KeyLogWriter = rt.transportOptions.KeyLogWriter
@@ -173,7 +181,13 @@ func (rt *roundTripper) dialTLS(ctx context.Context, network, addr string) (net.
 
 	switch conn.ConnectionState().NegotiatedProtocol {
 	case http2.NextProtoTLS:
-		utlsConfig := &tls.Config{ClientSessionCache: rt.clientSessionCache, InsecureSkipVerify: rt.insecureSkipVerify, OmitEmptyPsk: true}
+		utlsConfig := &tls.Config{
+			ClientSessionCache: rt.clientSessionCache,
+			InsecureSkipVerify: rt.insecureSkipVerify,
+			OmitEmptyPsk:       true,
+			Certificates:       rt.certificates,
+		}
+
 		if rt.transportOptions != nil {
 			utlsConfig.RootCAs = rt.transportOptions.RootCAs
 		}
@@ -267,7 +281,13 @@ func (rt *roundTripper) dial(ctx context.Context, network, addr string) (net.Con
 }
 
 func (rt *roundTripper) buildHttp1Transport() *http.Transport {
-	utlsConfig := &tls.Config{ClientSessionCache: rt.clientSessionCache, InsecureSkipVerify: rt.insecureSkipVerify, OmitEmptyPsk: true}
+	utlsConfig := &tls.Config{
+		ClientSessionCache: rt.clientSessionCache,
+		InsecureSkipVerify: rt.insecureSkipVerify,
+		OmitEmptyPsk:       true,
+		Certificates:       rt.certificates,
+	}
+
 	if rt.transportOptions != nil {
 		utlsConfig.RootCAs = rt.transportOptions.RootCAs
 	}
@@ -282,7 +302,13 @@ func (rt *roundTripper) buildHttp1Transport() *http.Transport {
 		idleConnectionTimeout = *rt.transportOptions.IdleConnTimeout
 	}
 
-	t := &http.Transport{DialContext: rt.dial, DialTLSContext: rt.dialTLS, TLSClientConfig: utlsConfig, ConnectionFlow: rt.connectionFlow, IdleConnTimeout: idleConnectionTimeout}
+	t := &http.Transport{
+		DialContext:     rt.dial,
+		DialTLSContext:  rt.dialTLS,
+		TLSClientConfig: utlsConfig,
+		ConnectionFlow:  rt.connectionFlow,
+		IdleConnTimeout: idleConnectionTimeout,
+	}
 
 	if rt.transportOptions != nil {
 		t.DisableKeepAlives = rt.transportOptions.DisableKeepAlives
@@ -311,7 +337,10 @@ func (rt *roundTripper) getDialTLSAddr(req *http.Request) string {
 	return net.JoinHostPort(req.URL.Host, "443")
 }
 
-func newRoundTripper(clientProfile profiles.ClientProfile, transportOptions *TransportOptions, serverNameOverwrite string, insecureSkipVerify bool, withRandomTlsExtensionOrder bool, forceHttp1 bool, certificatePins map[string][]string, badPinHandlerFunc BadPinHandlerFunc, disableIPV6 bool, bandwidthTracker bandwidth.BandwidthTracker, dialer ...proxy.ContextDialer) (http.RoundTripper, error) {
+func newRoundTripper(clientProfile profiles.ClientProfile, transportOptions *TransportOptions, serverNameOverwrite string,
+	insecureSkipVerify bool, withRandomTlsExtensionOrder bool, forceHttp1 bool, certificatePins map[string][]string,
+	badPinHandlerFunc BadPinHandlerFunc, disableIPV6 bool,
+	bandwidthTracker bandwidth.BandwidthTracker, certificates []tls.Certificate, dialer ...proxy.ContextDialer) (http.RoundTripper, error) {
 	pinner, err := NewCertificatePinner(certificatePins)
 	if err != nil {
 		return nil, fmt.Errorf("can not instantiate certificate pinner: %w", err)
@@ -346,6 +375,7 @@ func newRoundTripper(clientProfile profiles.ClientProfile, transportOptions *Tra
 		cachedConnections:           make(map[string]net.Conn),
 		disableIPV6:                 disableIPV6,
 		bandwidthTracker:            bandwidthTracker,
+		certificates:                certificates,
 	}
 
 	if len(dialer) > 0 {
